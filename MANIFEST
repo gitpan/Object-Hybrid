@@ -1,0 +1,8 @@
+Build.pl
+Changes
+Makefile.PL
+MANIFEST
+README
+t/Object-Hybrid.t
+lib/Object/Hybrid.pm
+META.yml
