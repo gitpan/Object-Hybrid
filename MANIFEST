@@ -6,3 +6,4 @@ README
 t/Object-Hybrid.t
 lib/Object/Hybrid.pm
 META.yml
+META.json

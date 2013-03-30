@@ -5,10 +5,14 @@
 
 use strict;
 
-use Test::More;
-BEGIN {	plan tests => 769; } # allows to calcualte tests plan, but now SKIP is (better) used instead
-
 BEGIN { $^W = 0; } 
+
+use Test::More;
+my  $use_autobox;
+BEGIN {	
+	$use_autobox = eval{ require autobox };
+	plan tests => 889 + ($use_autobox && 6 ); 
+} # allows to calcualte tests plan, if SKIP cannot be used instead
 
 BEGIN { use_ok('Object::Hybrid', qw(promote)) };
 
@@ -221,7 +225,7 @@ sub test_hash {
 
 		my $primitive = {}; 
 		is(ref $promote->($primitive), 'Object::Hybrid::CLASS'); # makes %$primitive a hybrid
-		is(ref         $primitive,     'Object::Hybrid::CLASS');
+		is(ref            $primitive,  'Object::Hybrid::CLASS');
 		  %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 		is($primitive->{foo},        'bar');
 		ok($primitive->can('fetch'));
@@ -231,7 +235,7 @@ sub test_hash {
 
 		$primitive = undef; 
 		is(ref $promote->($primitive, $hybrid_class),  $hybrid_class); # makes %$primitive a hybrid
-		is(ref         $primitive, $hybrid_class);
+		is(ref            $primitive, $hybrid_class);
 		  %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 		is($primitive->{foo},        'bar');
 		ok($primitive->can('fetch'));
@@ -262,6 +266,21 @@ sub test_hash {
 			ok( not eval{ $primitive->FETCH('foo') } ); # not yet
 			is(     tied(%$primitive), tied(%{$promote->($primitive)}) );  # NEVER re-ties
 			is(     tied(%$primitive), tied(%{$promote->($primitive)}) ); # $promote->() is idempotent
+			is(       ref($primitive), 'Object::Hybrid::CLASS');
+						 %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
+			is(           $primitive->FETCH('foo'), 'bar');
+			ok(           $primitive->can('fetch')); # this time check after FETCH() call...
+			ok(           $primitive->can('FETCH') );
+			ok(           $primitive->isa('Object::Hybrid::CLASS'));
+			is(           $primitive->{foo},        'bar');
+
+			$primitive = {}; 
+			tie(         %$primitive, $tieclass);
+						 %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
+			is(           $primitive->{foo},        'bar');
+			ok( not eval{ $primitive->FETCH('foo') } ); # not yet
+			is(     tied(%$primitive), tied(%{$promote->($primitive, wont_tie => 1)}) );  # NEVER re-ties
+			is(     tied(%$primitive), tied(%{$promote->($primitive, wont_tie => 1)}) ); # $promote->() is idempotent
 			is(       ref($primitive), 'Object::Hybrid::CLASS');
 						 %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 			is(           $primitive->FETCH('foo'), 'bar');
@@ -477,4 +496,23 @@ SKIP: {
 	tie *TIED_FH, 'Tie::StdHandle';
 	test_filehandle($file, \*TIED_FH);
 }
+
+$use_autobox and eval <<'CODE';
+
+$a = { foo => 'bar' };
+{
+	use Object::Hybrid 'autopromote';
+	ok({foo => 'bar'}->FETCH('foo'), 'bar');
+	ok(            $a->fetch('foo'), 'bar');
+}   ok(            $a->fetch('foo'), 'bar'); # beyond block scope
+
+$a = { foo => 'bar' };
+{
+	use Object::Hybrid 'autobox';
+	ok({foo => 'bar'}->FETCH('foo'), 'bar');
+	ok(            $a->fetch('foo'), 'bar');
+}   eval{          $a->fetch('foo')       }; # beyond block scope
+ok($@);
+
+CODE
 

@@ -3,7 +3,7 @@ package Object::Hybrid;
 #use 5.006; 
 
 use strict qw[vars subs];
-$Object::Hybrid::VERSION = '0.03_01';  
+$Object::Hybrid::VERSION = '0.03_02';  
 
 =head1 NAME
 
@@ -11,9 +11,7 @@ Object::Hybrid - promote Perl primitives (hashes, scalars, arrays, and filehandl
 
 =head1 SYNOPSIS
 
-Here (and everywhere in this documentation) $primitive is a reference to either hash, scalar, array, or filehandle (i.e. perltie types):
-
-	ref($primitive) =~ /^(HASH|SCALAR|ARRAY|GLOB)$/; # true
+Here (and everywhere in this documentation) $primitive is a reference to either hash, scalar, array, or filehandle (i.e. perltie types).
 
 Promote $primitive to become hybrid object:
 
@@ -104,6 +102,8 @@ will work for both in-memory and persistent hashes, and is really fast in case o
 
 In this context alternative to promote()ing primitive is tie()ing it to something like Tie::StdHash as it also will unify its interface with other tie()d hashes. However, this alternative gives up speed of plain primitives (slowdown of about 30-40 times in some benchmarks), also tie()ing hash full of data may involve sizable costs of data copying, as well as this alternative cannot deliver same range of benefits hybrid objects can.
 
+Note that C<< $tied_hybrid->FETCH('foo') >> is itself much slower than C<< tied(%$tied_hybrid)->FETCH('foo') >> (about 10 times in some benchmarks) and even than C<< $tied_hybrid->{'foo'} >> (about 2-3 times in some benchmarks), so that it should be used to make compatible only extended interface calls like C<< $tied_hybrid->FETCH('foo', @args) >>, otherwise using C<< $tied_hybrid->{'foo'} >>. 
+
 Despite promoting primitives to become hybrids turn them into Perl objects, compatibility with arbitrary Perl objects in practice has little value, since code that manipulates objects usually assume objects to be of very specific class. 
 
 =item tied()less access
@@ -144,6 +144,46 @@ Object::Hybrid is a lightweight pure Perl module with no dependencies beyond cor
 =head1 Stop reading now (or how to use this documentation)
 
 Usually, there is no need to read any of the following documentation to use Object::Hybrid - you can stop reading at this point. What you have read so far, or even just self-explanatory SYNOPSIS, is enough in most cases. The following documentation covers optional features that need not to be learned for using Object::Hybrid in most usual case (e.g. occasionally).
+
+=head1 C<use Object::Hybrid>
+
+	use Object::Hybrid;           # exports nothing
+	use Object::Hybrid $feature;  # enables single named feature
+	use Object::Hybrid %options; # most general form
+
+The following features are supported:
+
+	use Object::Hybrid             'promote';
+	use Object::Hybrid feature =>  'promote';  # same
+	use Object::Hybrid feature => ['promote']; # same
+	use Object::Hybrid export  =>  'promote';  # same
+	use Object::Hybrid export  => ['promote']; # same
+
+which exports (i.e. declares for use) the promote() function into caller's namespace.
+
+Next features depend on autobox pragma being installed (can be installed from CPAN archive):
+
+	use Object::Hybrid             'autobox';
+	use Object::Hybrid feature =>  'autobox';            # same
+	use Object::Hybrid feature => ['autobox'];           # same
+	use Object::Hybrid autobox => Object::Hybrid->CLASS; # same, but can be custom hybrid class
+
+which will automatically promote() any primitive within the current scope, and "unpromote" them back beyond that scope. It is is equivalent to:
+
+	use Object::Hybrid;
+	use autobox 
+	HASH   => Object::Hybrid->CLASS,
+	SCALAR => Object::Hybrid->CLASS,
+	ARRAY  => Object::Hybrid->CLASS; # can be custom hybrid class instead
+
+And closely related is:
+
+	use Object::Hybrid                 'autopromote';
+	use Object::Hybrid feature     =>  'autopromote';         # same
+	use Object::Hybrid feature     => ['autopromote'];        # same
+	use Object::Hybrid autopromote =>  Object::Hybrid->CLASS; # same, but can be custom hybrid class
+
+which makes any method call on primitive in the lexical scope to automatically promote() that primitive.
 
 =head1 promote() function
 
@@ -209,7 +249,7 @@ Note that new() do not construct object of Object::Hybrid class, even not $hybri
 	$tied = Object::Hybrid->tie( $primitive, $tieclass, @args); # for %$primitive same as...
 	$tied =                 tie(%$primitive, $tieclass, @args); # ... except $primitive also gets promote()d to hybrid
 
-=head2 is() method
+=head1 is() method
 
 	promote            $hybrid;
 	Object::Hybrid->is($hybrid);            # true
@@ -218,7 +258,7 @@ Note that new() do not construct object of Object::Hybrid class, even not $hybri
 
 Tells whether argument is a hybrid object, returning it if yes.
 
-=head2 class() method
+=head1 class() method
 
 	package Foo;
 	use Object::Hybrid;
@@ -231,7 +271,7 @@ Tells whether argument is a hybrid object, returning it if yes.
 
 Argumentless returns default hybrid class name. Otherwise tells whether argument class has been labeled as hybrid class (see L</"use Object::Hybrid::Class">, returning it if yes.
 
-=head1 ref_foo() (ref_*()) methods
+=head1 ref_*() methods
 
 These are utility methods useful to sort things out. Generally, all ref_foo() (ref_*()) methods return boolean that tells whether its argument is reference or not, but exact boolean value depends of the value of 'foo' suffix:
 
@@ -342,7 +382,7 @@ This requirement makes entire interface of tied() object exposed as hybrid objec
 
 If tied() object provides no called method, delegation fails and then hybrid class is to fall back to calling its own samename method (of the hybrid class), called "fallback method", on hybrid itself. Fallback method should correspond to type of primitive, in case there are options (for example, FETCH() called for hash and array are supposed to be different methods). Fallback methods are simply same methods that would be called if hybrid is not tied(), meaning same methods of the non-tied() hybrid remain available if hybrid is tied(), except when tied() object exposes and replaces them with its own methods, if any, with same names. 
 
-In particular, this is useful for defining methods that tied() class do not implement, e.g. to work around gaps in perltie implementation. For example, since stat() is not a perltie method currently, it is unlikely to be implemented by tiehandle class, but it is required to be defined for hybrid object to have portable C<promote($tied_fh)->stat> workarounds for currently broken C<stat($tied_fh)>, so hybrid's stat() method may look like:
+In particular, this is useful for defining methods that tied() class do not implement, e.g. to work around gaps in perltie implementation. For example, since stat() is not a perltie method currently, it is unlikely to be implemented by tiehandle class, but it is required to be defined for hybrid object to have portable C<< promote($tied_fh)->stat >> workarounds for currently broken C<stat($tied_fh)>, so hybrid's stat() method may look like:
 
 	sub stat { stat $_[0]->self }
 
@@ -352,7 +392,7 @@ Note that for perltie methods fallback methods are almost never called, because 
 
 =item Method aliases
 
-Hybrid classes must provide altered-case aliases for all its methods (e.g. lowercased aliases for all perltie methods). The method alias name is returned by C<Object::Hybrid->method_alias($method_name)>.
+Hybrid classes must provide altered-case aliases for all its methods (e.g. lowercased aliases for all perltie methods). The method alias name is returned by C<< Object::Hybrid->method_alias($method_name) >>.
 
 This requirement is especially relevant in case when there are same-name built-in functions for accessing primitives: shift(), exists(), seek(), etc. In this case and as general coding style for hybrids: the lower case should be used as functions or in direct method calls notation, while upper case can be used for indirect method call notation (later minimizes chances of indirect method notation colliding with non-parenthesized same name function calls). For example:
 
@@ -411,7 +451,7 @@ The default hybrid class makes no use of self() except for working around tiehan
 
 =item Optional bless() method
 
-If defined, C<$hybrid_class->bless($primitive)> method is called instead of otherwise calling bless($primitive, $hybrid_class). The bless() method is optional. It can be used as constructor/initializer for hybrid object, except it is to reuse $primitive (same as built-in bless()) instead of creating new. TIE*() and new() constructors are not used for that, as they are supposed to be perltie-style constructors and we keep them as such in case tieclass is subclassed to make hybrid class.
+If defined, C<< $hybrid_class->bless($primitive) >> method is called instead of otherwise calling bless($primitive, $hybrid_class). The bless() method is optional. It can be used as constructor/initializer for hybrid object, except it is to reuse $primitive (same as built-in bless()) instead of creating new. TIE*() and new() constructors are not used for that, as they are supposed to be perltie-style constructors and we keep them as such in case tieclass is subclassed to make hybrid class.
 
 =item C<use Object::Hybrid::Class>
 
@@ -457,7 +497,7 @@ As soon as (and if) Object::Hybrid interface stabilizes enough, its version is t
 
 =head1 SEE ALSO
 
-The "use autobox" pragma is another way of doing somewhat similar, but not the same things, so autobox and Object::Hybrid are not mutually substitutive.
+The C<use autobox> pragma is another way of doing somewhat similar, but not the same things, so autobox and Object::Hybrid are not mutually substitutive. However, if C<autobox> pragma is installed, then either "autobox" or "autopromote" feature can be enabled  - see L</"use Object::Hybrid">.
 
 =head1 SUPPORT
 
@@ -488,16 +528,27 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 no warnings;  
 
-sub TIEDCLASS    () { 'Object::Hybrid::CLASS'   }
-sub CLASS        () { 'Object::Hybrid::CLASS'   }
-sub HASHCLASS    () { 'Object::Hybrid::_HASH'   }
-sub SCALARCLASS  () { 'Object::Hybrid::_SCALAR' }
-sub ARRAYCLASS   () { 'Object::Hybrid::_ARRAY'  }
-sub HANDLECLASS  () { 'Object::Hybrid::_GLOB'   }
+sub CLASS_TIED      () { 'Object::Hybrid::CLASS'   }
+sub CLASS           () { 'Object::Hybrid::CLASS'   }
+sub CLASS_HASH      () { 'Object::Hybrid::_HASH'   }
+sub CLASS_SCALAR    () { 'Object::Hybrid::_SCALAR' }
+sub CLASS_ARRAY     () { 'Object::Hybrid::_ARRAY'  }
+sub CLASS_HANDLE    () { 'Object::Hybrid::_GLOB'   }
+sub CLASS_AUTOPROMO () { 'Object::Hybrid::AUTOPROMOTE' }
 
-foreach (HASHCLASS(), SCALARCLASS(), ARRAYCLASS(), HANDLECLASS()) {
+my %class4type = (
+	HASH   =>   CLASS_HASH,
+	ARRAY  =>  CLASS_ARRAY,
+	SCALAR => CLASS_SCALAR,
+	GLOB   => CLASS_HANDLE,
+	CODE   => undef, 
+	REF    => undef, 
+	LVALUE => undef, 
+);
+
+foreach (CLASS_HASH, CLASS_SCALAR, CLASS_ARRAY, CLASS_HANDLE) {
 	(my $class         =  $_) =~ s/_+//g;
-	@{"${class}::ISA"} = ($_, CLASS());
+	@{"${class}::ISA"} = ($_, CLASS);
 }
 
 my %AD;
@@ -506,11 +557,91 @@ __PACKAGE__->import(qw(promote));
 sub import {
 	my $self = shift;
 
-	*{join '::', scalar caller, qw(promote)} = sub{ unshift @_, $self; goto &{ $self->can(qw(new)) } }
-	if               grep $_ eq qw(promote), @_;
+	# interface...
+	my $opt 
+	=     @_ > 1          ? {@_} 
+	:    !@_              ? {  } 
+	: ref $_[0] eq 'HASH' ?  $_[0] 
+	: {          feature => [$_[0]] };
+
+	# normalize %$opt...
+	foreach my $list (qw(feature export autopromote)) { 
+		next 
+		if !exists $opt->{$list};
+		ref        $opt->{$list} eq 'ARRAY' 
+		or         $opt->{$list} 
+		=         [$opt->{$list}];
+	}
+
+	my @goto;
+
+	# process features first...
+	foreach my $feature (ref $opt->{feature} eq 'ARRAY' ? @{$opt->{feature}} : $opt->{feature}) {
+		if ($feature eq 'promote') { push @{$opt->{export}}, $feature }
+
+		# mutually exclusive features...
+		if ($feature eq 'autobox') {
+			unless ($opt->{$feature}) {
+				_load_class($self->CLASS);
+				_load_class($self->CLASS_HASH);
+				_load_class($self->CLASS_SCALAR);
+				_load_class($self->CLASS_ARRAY);
+			}
+			require 
+			autobox;
+			autobox::import( ref($self)||$self, 
+			HASH   =>  $opt->{$feature}||$self->CLASS, # method instead of constant, for subclassing...
+			SCALAR =>  $opt->{$feature}||$self->CLASS,
+			#GLOB  =>  $opt->{$feature}||$self->CLASS, # not supported by autobox
+			ARRAY  =>  $opt->{$feature}||$self->CLASS, );
+		}
+		elsif ($feature eq 'autopromote') {
+			require 
+			autobox;
+			autobox::import( ref($self)||$self, 
+			HASH           => CLASS_AUTOPROMO,
+			SCALAR         => CLASS_AUTOPROMO,
+			#GLOB          => CLASS_AUTOPROMO, # not supported by autobox
+			ARRAY          => CLASS_AUTOPROMO, );
+			my $autoload 
+			=      __PACKAGE__ . '::AUTOLOAD'; 
+			*{ CLASS_AUTOPROMO . '::AUTOLOAD' } = sub{ 
+				$self->new($_[0], @{$opt->{$feature}}||()); 
+				$$autoload =~ s/^.*:://;
+				goto &{ $_[0]->can($$autoload) 
+				or croak(_cant_locate_object_method($_[0], $$autoload)) };
+			};
+		}
+	}
+
+	# process options...
+	if ($opt->{export}) {
+		my @symbols;
+		foreach my $symbol (@{$opt->{export}||[]}) {
+			if (   $symbol eq 'promote' ) { 
+				*{join '::', scalar caller, $symbol} 
+				= sub{ unshift @_, $self; goto &{ $self->can(qw(new)) } };
+			}
+			else { push @symbols, $symbol }
+		}
+
+		if (@symbols 
+		or  @{(ref($self)||$self).'::EXPORT'}
+		or  @{        __PACKAGE__.'::EXPORT'}) {
+			require 
+			Exporter;
+			Exporter::export_to_level(1, $self,       @symbols) or 
+			Exporter::export_to_level(1, __PACKAGE__, @symbols); # "inheritance" of export, subclasses can define their own @EXPORTs,
+		}
+	}
+
+	if (@goto) {
+		@_ = @goto;
+		goto &{shift(@_)};
+	}
 }
 
-sub class { @_ <= 1 ? CLASS() : Object::Hybrid::Class->is($_[1]) ? $_[1] : undef }
+sub class { @_ <= 1 ? CLASS : Object::Hybrid::Class->is($_[1]) ? $_[1] : undef }
 sub is    {        ref $_[1] && Object::Hybrid::Class->is($_[1]) ? $_[1] : undef }
 
 sub new { 
@@ -523,29 +654,29 @@ sub new {
 
 	# be idempotent...
 	return  $primitive 
-	if  ref $primitive eq ($class||CLASS());
+	if  ref $primitive eq ($class||CLASS);
 
 	!   _ref_isa($primitive) 
 	or $self->is($primitive)
 	or croak("Can't promote non-hybrid object $primitive");
 	my $tied_primitive = _ref_tied($primitive);
 
-	_load_class(CLASS()) if $class and $class->isa(CLASS()); 
+	_load_class(CLASS) if $class and $class->isa(CLASS); 
 
 	unless (         $class #and !$tied_primitive||$args->{not_tied}
 	and $self->class($class) 
 	&&      _can_tie($class, $primitive) # autovivifies $primitive
 	|| croak("Error: Wrong hybrid class $class, either not labled as such or defines no proper perltie methods ") 
 	) { 
-		my $use_class = TIEDCLASS() # must be default to avoid promote() results depend on the order of tie() and promote()
+		my $use_class = CLASS_TIED # must be default to avoid promote() results depend on the order of tie() and promote()
 		unless !$tied_primitive 
 		&& $args->{wont_tie} 
 		or $args->{not_tied};
 		$class 
-		=  ref $primitive eq 'HASH'   ? _load_class($use_class,   HASHCLASS())
-		:  ref $primitive eq 'SCALAR' ? _load_class($use_class, SCALARCLASS())
-		:  ref $primitive eq 'ARRAY'  ? _load_class($use_class,  ARRAYCLASS())
-		:  ref $primitive eq 'GLOB'   ? _load_class($use_class, HANDLECLASS()) 
+		=  ref $primitive eq 'HASH'   ? _load_class($use_class, CLASS_HASH)
+		:  ref $primitive eq 'SCALAR' ? _load_class($use_class, CLASS_SCALAR)
+		:  ref $primitive eq 'ARRAY'  ? _load_class($use_class, CLASS_ARRAY)
+		:  ref $primitive eq 'GLOB'   ? _load_class($use_class, CLASS_HANDLE) 
 		:  ref $primitive 
 		?  croak("Error: Can't promote, for $primitive there is neither tied() object and nor standard class to bless() into ")
 		:  croak("Error: Nothing to promote");
@@ -587,7 +718,7 @@ sub _load_class {
 		eval( !exists $AD{$_} ? "require $_" 
 		:             $AD{$_} ); 
 		undef         $AD{$_}; # be idempotent
-		@_ or croak("Error: Can't load $_: $@");
+		!$@ or croak("Error: Can't load $_: $@");
 	}
 	return( (grep $_, @_)[0] ) # same as $_[0] || $_[1] || ...
 }
@@ -610,6 +741,14 @@ sub _can_tie { # if not given, autovivifies (in place) primitive of type that ca
 }
 
 sub ref_tied  { shift; _ref_tied(@_) }
+sub _ref_tied2 { # this is much faster at least for tied hashes, but for non-tied tries all variants (still may be faster)
+	return undef if !ref $_[0];
+	return eval{ tied( %{$_[0]} ) }
+	||     eval{ tied( ${$_[0]} ) }
+	||     eval{ tied( @{$_[0]} ) }
+	||     eval{ tied( *{$_[0]} ) } 
+	||     undef
+}
 sub _ref_tied {
 	return undef 
 	if !ref $_[0];
@@ -629,23 +768,15 @@ sub _ref_type {
 
 sub ref_isa  { shift; _ref_isa(@_) }
 sub _ref_isa { 
-	return undef unless ref $_[0];
-	my $ref = ref $_[0];
-	return '' 
-		if $ref eq 'HASH' 
-		or $ref eq 'SCALAR' 
-		or $ref eq 'ARRAY' 
-		or $ref eq 'CODE'
-		or $ref eq 'GLOB'
-		or $ref eq 'REF'
-		or $ref eq 'LVALUE';  
-	return 0 if defined $_[1] and !$_[0]->isa($_[1]);
-	$_[0]
+	return undef if !ref    $_[0];
+	return ''    if exists $class4type{ref $_[0]};  
+	return 0     if defined $_[1] and     !$_[0]->isa($_[1]);
+	return $_[0]
 }
 
 sub croak { require Carp; goto &Carp::croak; }
 
-sub _alter_case   { $_[0] =~ /[A-Z]/ ? lc($_[0]) : uc($_[0]) };
+sub _alter_case  { $_[0] =~ /[A-Z]/ ? lc($_[0]) : uc($_[0]) };
 sub method_alias { _alter_case($_[1]) }
 
 sub methods {
@@ -669,7 +800,61 @@ sub methods {
 	}
 }
 
-$AD{   'Object::Hybrid::CLASS' } = <<'CLASS';
+sub _cant_locate_object_method {
+	join '', "Object::Hybrid: Can't locate object method \""
+	, $_[1], "\" via package \""
+	, ref($_[0])||$_[0], "\" (perhaps you forgot to load \""
+	, ref($_[0])||$_[0], "\"?) "
+}
+
+BEGIN {
+
+	$INC{  "Class\/Tag.pm" } ||= 1; 
+	package Class::Tag;
+
+	sub ANTICOLLIDER () { 'aixfHgvpm7hgVziaO' }
+	sub _tags_accessor  { _subnames( join '_', $_[0], ANTICOLLIDER(), $_[1] ) }
+
+	sub _subnames { my $a; ($a = $_[0]) =~ s/:/_/g; return $a }
+
+	sub import {
+		shift;
+		my $tag_class = caller;
+
+		$INC{ join '/', split '::', "$tag_class.pm" } ||= 1; # support inlined tag classes 
+
+		*{join '::', $tag_class, 'import'} = sub{
+			shift;
+			my   $tags;
+			ref          $_[0] eq 'HASH' 
+			? (  $tags = $_[0] ) 
+			: ( @$tags{  @_ } = (1) x @_ );
+
+			!exists $tags->{is} 
+			and     $tags->{is} = 1;
+
+			foreach (keys %$tags) {
+				my  $tag = bless \$tags->{$_}, $tag_class; # wrap value of the tag to distingush it from possible AUTOLOAD()ed return values
+				*{join '::', scalar caller, _tags_accessor($tag_class, $_) } = sub{ $tag };
+			}
+		};
+
+		foreach ( @_ ? @_ : 'is' ) {
+			my $tags_accessor = _tags_accessor($tag_class, $_);
+			*{join '::', $tag_class, $_ } = sub{
+				my $tag =   @_ > 1  # called as method
+				? eval {    $_[1]->$tags_accessor   }
+				: eval { &{"$_[0]::$tags_accessor"} };
+				return ref $tag eq $tag_class ? $$tag : undef
+			} 
+		}
+	}
+
+}
+
+{ package Object::Hybrid::Class; use Class::Tag; } # inlined tag class
+
+#$AD{   'Object::Hybrid::CLASS' } = <<'CLASS'; 
 $INC{  "Object\/Hybrid\/CLASS.pm" } ||= 1;
 package Object::Hybrid::CLASS;
 
@@ -694,41 +879,47 @@ Object::Hybrid->methods(
 	},
 );
 
+my $AUTOLOAD = \&AUTOLOAD;
 sub AUTOLOAD {
 	package Object::Hybrid; # to not qualify _ref_tied(), _ref_type(), croak(), etc...
 
-	my $subclass = join '::', 'Object::Hybrid', '_'. (_ref_type($_[0])||'FOO'); 
-
-	my  $swap;
-	if ($swap = _ref_tied($_[0])) { $swap = splice(@_, 0, 1, $swap); } 
+	my $swap
+	;  $swap = splice(@_, 0, 1, $swap) 
+	if $swap 
+	=  eval{ tied( %{$_[0]} ) }
+	|| eval{ tied( ${$_[0]} ) }
+	|| eval{ tied( @{$_[0]} ) }
+	|| eval{ tied( *{$_[0]} ) }
+	|| undef; 
 
 	$Object::Hybrid::CLASS::AUTOLOAD =~ s/^.*:://;
 	$Object::Hybrid::CLASS::AUTOLOAD eq 'can' and my $can_method = $_[1];
 
-	my  $method;
-	{
-		$method
-		||=     $_[0]->UNIVERSAL::can(            $can_method||$Object::Hybrid::CLASS::AUTOLOAD ) 
-		||      $_[0]->UNIVERSAL::can(_alter_case($can_method||$Object::Hybrid::CLASS::AUTOLOAD));
+	my 
+	$method;
+	$method
+	=  $_[0]->UNIVERSAL::can(            $can_method||$Object::Hybrid::CLASS::AUTOLOAD ) 
+	|| $_[0]->UNIVERSAL::can(_alter_case($can_method||$Object::Hybrid::CLASS::AUTOLOAD))
+	if $swap 
+	or $can_method; 
 
+	if (!$method) { 
+		splice(@_, 0, 1, $swap)	if $swap; # revert swap, if any
+		my 
+		$subclass;
+		#$subclass = $class4type{_ref_type($_[0])}||'FOO', # instead inlining...
+		$subclass  = $class4type{!ref $_[0] ? undef : $_[0] =~ /=(\w+)/ ? $1 : ref $_[0]}||'FOO',
 		$method
-		||= $subclass->UNIVERSAL::can(            $can_method||$Object::Hybrid::CLASS::AUTOLOAD ) 
-		||  $subclass->UNIVERSAL::can(_alter_case($can_method||$Object::Hybrid::CLASS::AUTOLOAD)) 
-		if  !$swap;
-
-		splice(@_, 0, 1, $swap), $swap = undef,
-		redo if !$method and     $swap;
+		=  $subclass->UNIVERSAL::can(            $can_method||$Object::Hybrid::CLASS::AUTOLOAD ) 
+		|| $subclass->UNIVERSAL::can(_alter_case($can_method||$Object::Hybrid::CLASS::AUTOLOAD));
 	}
 
 	return $method if $can_method;
 
 	$method 
-	or croak( join '', "Can't locate object method \""
-	, $Object::Hybrid::CLASS::AUTOLOAD, "\" via package \""
-	, ref($_[0])||$_[0], "\" (perhaps you forgot to load \""
-	, ref($_[0])||$_[0], "\"?) ");
+	or croak( _cant_locate_object_method($_[0], $Object::Hybrid::CLASS::AUTOLOAD) );
 
-	$method ne \&AUTOLOAD
+	$method ne $AUTOLOAD
 	#and defined(&$method) # here goto() to not defined(&method) is ok as it may be autoloadable in tied() class or otherwise
 	or croak( join '', "Undefined method \""
 	, $Object::Hybrid::CLASS::AUTOLOAD, "\" called via package \""
@@ -737,7 +928,7 @@ sub AUTOLOAD {
 	goto &$method
 }
 
-CLASS
+#CLASS
 
 $AD{   'Object::Hybrid::_HASH' } = <<'CLASS';
 $INC{  "Object\/Hybrid\/_HASH.pm" } ||= 1;
@@ -905,53 +1096,6 @@ Object::Hybrid->methods({
 sub DESTROY {}
 
 CLASS
-
-BEGIN {
-
-	$INC{  "Class\/Tag.pm" } ||= 1;
-	package Class::Tag;
-
-	sub ANTICOLLIDER () { 'aixfHgvpm7hgVziaO' }
-	sub _tags_accessor  { _subnames( join '_', $_[0], ANTICOLLIDER(), $_[1] ) }
-
-	sub _subnames { my $a; ($a = $_[0]) =~ s/:/_/g; return $a }
-
-	sub import {
-		shift;
-		my $tag_class = caller;
-
-		$INC{ join '/', split '::', "$tag_class.pm" } ||= 1; # support inlined tag classes 
-
-		*{join '::', $tag_class, 'import'} = sub{
-			shift;
-			my   $tags;
-			ref          $_[0] eq 'HASH' 
-			? (  $tags = $_[0] ) 
-			: ( @$tags{  @_ } = (1) x @_ );
-
-			!exists $tags->{is} 
-			and     $tags->{is} = 1;
-
-			foreach (keys %$tags) {
-				my  $tag = bless \$tags->{$_}, $tag_class; # wrap value of the tag to distingush it from possible AUTOLOAD()ed return values
-				*{join '::', scalar caller, _tags_accessor($tag_class, $_) } = sub{ $tag };
-			}
-		};
-
-		foreach ( @_ ? @_ : 'is' ) {
-			my $tags_accessor = _tags_accessor($tag_class, $_);
-			*{join '::', $tag_class, $_ } = sub{
-				my $tag =   @_ > 1  # called as method
-				? eval {    $_[1]->$tags_accessor   }
-				: eval { &{"$_[0]::$tags_accessor"} };
-				return ref $tag eq $tag_class ? $$tag : undef
-			} 
-		}
-	}
-
-}
-
-{ package Object::Hybrid::Class; use Class::Tag; } # inlined tag class
 
 1;
 

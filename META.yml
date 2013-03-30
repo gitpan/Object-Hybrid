@@ -2,9 +2,11 @@
 abstract: 'promote Perl primitives (hashes, scalars, arrays, and filehandles), either tie()d or not, to become hybrid objects'
 author:
   - 'Alexandr Kononoff (L<mailto:parsels@mail.ru>)'
+build_requires: {}
 configure_requires:
-  Module::Build: 0.36
-generated_by: 'Module::Build version 0.3601'
+  Module::Build: 0.38
+dynamic_config: 1
+generated_by: 'Module::Build version 0.38, CPAN::Meta::Converter version 2.112150'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -13,15 +15,18 @@ name: Object-Hybrid
 provides:
   Class::Tag:
     file: lib/Object/Hybrid.pm
+    version: 0
   Object::Hybrid:
     file: lib/Object/Hybrid.pm
-    version: 0.03_01
+    version: 0.03_02
   Object::Hybrid::CLASS:
     file: lib/Object/Hybrid.pm
+    version: 0
   Object::Hybrid::Class:
     file: lib/Object/Hybrid.pm
+    version: 0
 requires:
   perl: 5.006
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.03_01
+version: 0.03_02
