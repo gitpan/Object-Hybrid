@@ -26,7 +26,7 @@ BEGIN { use_ok('Object::Hybrid', qw(promote)) };
 {
 	package Object::Hybrid::StdHash;
 	       @Object::Hybrid::StdHash::ISA 
-	     = 'Object::Hybrid::CLASS';
+	     = Object::Hybrid->CLASS;
 
 	Object::Hybrid->methods(
 		TIEHASH  => sub { bless {}, $_[0] },
@@ -224,13 +224,13 @@ sub test_hash {
 	foreach my $hybrid_class (@hybrid_class) {
 
 		my $primitive = {}; 
-		is(ref $promote->($primitive), 'Object::Hybrid::CLASS'); # makes %$primitive a hybrid
-		is(ref            $primitive,  'Object::Hybrid::CLASS');
+		is(ref $promote->($primitive), Object::Hybrid->CLASS); # makes %$primitive a hybrid
+		is(ref            $primitive,  Object::Hybrid->CLASS);
 		  %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 		is($primitive->{foo},        'bar');
 		ok($primitive->can('fetch'));
 		ok($primitive->can('FETCH'));
-		ok($primitive->isa('Object::Hybrid::CLASS'));
+		ok(Object::Hybrid->is($primitive));
 		is($primitive->FETCH('foo'), 'bar');
 
 		$primitive = undef; 
@@ -247,13 +247,13 @@ sub test_hash {
 					 %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 		is(           $primitive->{foo},        'bar');
 		ok( not eval{ $primitive->FETCH('foo') } ); # not yet
-		is(     tied(%$primitive), tied(%{$promote->($primitive)}) ); # both not tied()
-		is(     tied(%$primitive), tied(%{$promote->($primitive)}) ); # $promote->() is idempotent
-		is(       ref($primitive), 'Object::Hybrid::CLASS');
+		is(     tied(%$primitive), tied(%{$promote->($primitive, wont_tie => 1)}) ); # both not tied()
+		is(     tied(%$primitive), tied(%{$promote->($primitive, wont_tie => 1)}) ); # $promote->() is idempotent
+		ok( Object::Hybrid->is($primitive) );
 					 %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 		ok(           $primitive->can('fetch'));
 		ok(           $primitive->can('FETCH') );
-		ok(           $primitive->isa('Object::Hybrid::CLASS'));
+		ok( Object::Hybrid->is($primitive));
 		is(           $primitive->FETCH('foo'), 'bar');
 		is(           $primitive->{foo},        'bar');
 
@@ -266,12 +266,12 @@ sub test_hash {
 			ok( not eval{ $primitive->FETCH('foo') } ); # not yet
 			is(     tied(%$primitive), tied(%{$promote->($primitive)}) );  # NEVER re-ties
 			is(     tied(%$primitive), tied(%{$promote->($primitive)}) ); # $promote->() is idempotent
-			is(       ref($primitive), 'Object::Hybrid::CLASS');
+			is(       ref($primitive), Object::Hybrid->CLASS);
 						 %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 			is(           $primitive->FETCH('foo'), 'bar');
 			ok(           $primitive->can('fetch')); # this time check after FETCH() call...
 			ok(           $primitive->can('FETCH') );
-			ok(           $primitive->isa('Object::Hybrid::CLASS'));
+			ok( Object::Hybrid->is($primitive));
 			is(           $primitive->{foo},        'bar');
 
 			$primitive = {}; 
@@ -281,12 +281,12 @@ sub test_hash {
 			ok( not eval{ $primitive->FETCH('foo') } ); # not yet
 			is(     tied(%$primitive), tied(%{$promote->($primitive, wont_tie => 1)}) );  # NEVER re-ties
 			is(     tied(%$primitive), tied(%{$promote->($primitive, wont_tie => 1)}) ); # $promote->() is idempotent
-			is(       ref($primitive), 'Object::Hybrid::CLASS');
+			is(       ref($primitive), Object::Hybrid->CLASS);
 						 %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 			is(           $primitive->FETCH('foo'), 'bar');
 			ok(           $primitive->can('fetch')); # this time check after FETCH() call...
 			ok(           $primitive->can('FETCH') );
-			ok(           $primitive->isa('Object::Hybrid::CLASS'));
+			ok( Object::Hybrid->is($primitive));
 			is(           $primitive->{foo},        'bar');
 
 			$primitive = {}; 
@@ -294,12 +294,12 @@ sub test_hash {
 			is(           $primitive->{foo},        'bar');
 			ok( not eval{ $primitive->FETCH('foo') } ); # not yet
 			Object::Hybrid->tie($primitive, $tieclass);
-			is(       ref($primitive), 'Object::Hybrid::CLASS');
+			is(       ref($primitive), Object::Hybrid->CLASS);
 						 %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 			is(           $primitive->FETCH('foo'), 'bar');
 			ok(           $primitive->can('fetch')); # this time check after FETCH() call...
 			ok(           $primitive->can('FETCH') );
-			ok(           $primitive->isa('Object::Hybrid::CLASS'));
+			ok( Object::Hybrid->is($primitive));
 			is(           $primitive->{foo},        'bar');
 
 			$primitive = {}; 

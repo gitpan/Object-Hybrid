@@ -32,13 +32,29 @@
       },
       "Object::Hybrid" : {
          "file" : "lib/Object/Hybrid.pm",
-         "version" : "0.03_02"
+         "version" : "0.03_03"
+      },
+      "Object::Hybrid::ARRAY" : {
+         "file" : "lib/Object/Hybrid.pm",
+         "version" : 0
       },
       "Object::Hybrid::CLASS" : {
          "file" : "lib/Object/Hybrid.pm",
          "version" : 0
       },
       "Object::Hybrid::Class" : {
+         "file" : "lib/Object/Hybrid.pm",
+         "version" : 0
+      },
+      "Object::Hybrid::GLOB" : {
+         "file" : "lib/Object/Hybrid.pm",
+         "version" : 0
+      },
+      "Object::Hybrid::HASH" : {
+         "file" : "lib/Object/Hybrid.pm",
+         "version" : 0
+      },
+      "Object::Hybrid::SCALAR" : {
          "file" : "lib/Object/Hybrid.pm",
          "version" : 0
       }
@@ -49,5 +65,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.03_02"
+   "version" : "0.03_03"
 }

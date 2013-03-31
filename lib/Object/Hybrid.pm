@@ -3,7 +3,7 @@ package Object::Hybrid;
 #use 5.006; 
 
 use strict qw[vars subs];
-$Object::Hybrid::VERSION = '0.03_02';  
+$Object::Hybrid::VERSION = '0.03_03';  
 
 =head1 NAME
 
@@ -47,6 +47,8 @@ In case non-tied() primitives need to be interchangeable with tied() ones that h
 just:
 
 	$primitive->FETCH('foo', @args);
+
+However, former may still be (much) preferred for performance reasons (and it accepts both plain and promoted $primitive).
 
 If $FH is a plain filehandle or tiehandle tied to class that implements stat(), ftest() (and others) and self() method, then the following simple code need not to discriminate between them:
 
@@ -202,7 +204,7 @@ If $primitive specified is of type not currently supported by Object::Hybrid, ex
 
 The return value is a hybrid object, i.e. $primitive itself (may be useful if promote() is used in expressions).
 
-By default, promote() always uses universal Object::Hybrid::CLASS and order of promote() and possible tie() calls is irrelevant. However, to increase performance just a tiny bit it is possible to make promote() to use type-specific default hybrid class instead:
+By default, promote() always uses universal Object::Hybrid::CLASS and order of promote() and possible tie() calls is irrelevant. However, to significantly increase performance (times in some cases) it is possible to make promote() to instead use type-specific default hybrid class:
 
 The "wont_tie" => 1 option constitutes a promise that promote()d non-tied() primitive will not be tie()d later (meaning tie(), if any, always happens before promote()), so that type-specific hybrid classes can be used to promote() non-tied() primitives by default instead of otherwise default universal Object::Hybrid::CLASS. This option has no effect if custom hybrid class is used.
 
@@ -530,10 +532,10 @@ no warnings;
 
 sub CLASS_TIED      () { 'Object::Hybrid::CLASS'   }
 sub CLASS           () { 'Object::Hybrid::CLASS'   }
-sub CLASS_HASH      () { 'Object::Hybrid::_HASH'   }
-sub CLASS_SCALAR    () { 'Object::Hybrid::_SCALAR' }
-sub CLASS_ARRAY     () { 'Object::Hybrid::_ARRAY'  }
-sub CLASS_HANDLE    () { 'Object::Hybrid::_GLOB'   }
+sub CLASS_HASH      () { 'Object::Hybrid::HASH'   }
+sub CLASS_SCALAR    () { 'Object::Hybrid::SCALAR' }
+sub CLASS_ARRAY     () { 'Object::Hybrid::ARRAY'  }
+sub CLASS_HANDLE    () { 'Object::Hybrid::GLOB'   }
 sub CLASS_AUTOPROMO () { 'Object::Hybrid::AUTOPROMOTE' }
 
 my %class4type = (
@@ -546,9 +548,8 @@ my %class4type = (
 	LVALUE => undef, 
 );
 
-foreach (CLASS_HASH, CLASS_SCALAR, CLASS_ARRAY, CLASS_HANDLE) {
-	(my $class         =  $_) =~ s/_+//g;
-	@{"${class}::ISA"} = ($_, CLASS);
+foreach my $class (CLASS_HASH, CLASS_SCALAR, CLASS_ARRAY, CLASS_HANDLE) {
+	@{   "${class}2::ISA" } = ($_, CLASS); 
 }
 
 my %AD;
@@ -673,15 +674,13 @@ sub new {
 		&& $args->{wont_tie} 
 		or $args->{not_tied};
 		$class 
-		=  ref $primitive eq 'HASH'   ? _load_class($use_class, CLASS_HASH)
-		:  ref $primitive eq 'SCALAR' ? _load_class($use_class, CLASS_SCALAR)
-		:  ref $primitive eq 'ARRAY'  ? _load_class($use_class, CLASS_ARRAY)
-		:  ref $primitive eq 'GLOB'   ? _load_class($use_class, CLASS_HANDLE) 
-		:  ref $primitive 
-		?  croak("Error: Can't promote, for $primitive there is neither tied() object and nor standard class to bless() into ")
+		=  _ref_type($primitive) eq 'HASH'   ? _load_class($use_class, CLASS_HASH)
+		:  _ref_type($primitive) eq 'SCALAR' ? _load_class($use_class, CLASS_SCALAR)
+		:  _ref_type($primitive) eq 'ARRAY'  ? _load_class($use_class, CLASS_ARRAY)
+		:  _ref_type($primitive) eq 'GLOB'   ? _load_class($use_class, CLASS_HANDLE) 
+		:   ref      $primitive 
+		?  croak("Error: Can't promote since $primitive either non-tie()able or already bless()ed")
 		:  croak("Error: Nothing to promote");
-
-		$class =~ s/_+//g;
 
 		#eval "require $class" # only built-in classes
 		#or die("Can't lload $class");
@@ -858,7 +857,7 @@ BEGIN {
 $INC{  "Object\/Hybrid\/CLASS.pm" } ||= 1;
 package Object::Hybrid::CLASS;
 
-use Object::Hybrid::Class; # just labeled
+use Object::Hybrid::Class; # just labeling
 
 sub can;  
 #sub isa; 
@@ -868,9 +867,9 @@ Object::Hybrid->methods(
 		my      $self; 
 		return  $self
 		if      $self 
-		=   Object::Hybrid::_ref_tied($_[0])
-		and Object::Hybrid::_ref_type($_[0]) 
-		eq  Object::Hybrid::_ref_type($self) 
+		=   Object::Hybrid::ref_tied($_[0])
+		and Object::Hybrid::ref_type($_[0]) 
+		eq  Object::Hybrid::ref_type($self) 
 		and ref($self) =~ /Std/;
 
 		!$self or die("tied() class defines nor valid self() method for $_[0] (self() returned $self)");
@@ -930,11 +929,14 @@ sub AUTOLOAD {
 
 #CLASS
 
-$AD{   'Object::Hybrid::_HASH' } = <<'CLASS';
+$AD{   'Object::Hybrid::HASH' } = <<'CLASS';
 $INC{  "Object\/Hybrid\/_HASH.pm" } ||= 1;
-package Object::Hybrid::_HASH;
+package Object::Hybrid::HASH;
+
+use Object::Hybrid::Class; # just labeling
 
 Object::Hybrid->methods({
+	self     => sub { $_[0] },
 	TIEHASH  => sub { bless {}, ref($_[0])||$_[0] },
 	STORE    => sub { $_[0]->{$_[1]} = $_[2] },
 	FETCH    => sub { $_[0]->{$_[1]} },
@@ -950,11 +952,14 @@ sub DESTROY {}
 
 CLASS
 
-$AD{   'Object::Hybrid::_SCALAR' } = <<'CLASS';
+$AD{   'Object::Hybrid::SCALAR' } = <<'CLASS';
 $INC{  "Object\/Hybrid\/_SCALAR.pm" } = 1;
-package Object::Hybrid::_SCALAR;
+package Object::Hybrid::SCALAR;
+
+use Object::Hybrid::Class; # just labeling
 
 Object::Hybrid->methods({
+	self      => sub { $_[0] },
 	TIESCALAR => sub {
 		my $class = shift;
 		my $instance = shift || undef;
@@ -968,11 +973,14 @@ sub DESTROY { undef ${$_[0]} }
 
 CLASS
 
-$AD{   'Object::Hybrid::_ARRAY' } = <<'CLASS';
+$AD{   'Object::Hybrid::ARRAY' } = <<'CLASS';
 $INC{  "Object\/Hybrid\/_ARRAY.pm" } ||= 1;
-package Object::Hybrid::_ARRAY;
+package Object::Hybrid::ARRAY;
+
+use Object::Hybrid::Class; # just labeling
 
 Object::Hybrid->methods({
+	self      => sub { $_[0] },
 	TIEARRAY  => sub { bless [], $_[0] },
 	FETCHSIZE => sub { scalar @{$_[0]} },
 	STORESIZE => sub { $#{$_[0]} = $_[1]-1 },
@@ -1000,25 +1008,19 @@ sub DESTROY {}
 
 CLASS
 
-$AD{   'Object::Hybrid::_GLOB' } = <<'CLASS';
+$AD{   'Object::Hybrid::GLOB' } = <<'CLASS';
 $INC{  "Object\/Hybrid\/_GLOB.pm" } ||= 1;
-package Object::Hybrid::_GLOB;
+package Object::Hybrid::GLOB;
+
+use Object::Hybrid::Class; # just labeling
 
 sub new { 
 	goto &{ $_[0]->can(qw(TIEHANDLE))
 	||Object::Hybrid::croak("Method not defined:  new() / TIEHANDLE()") } 
 }
 
-my $self  = sub { 
-	my  $FH = eval{ $_[0]->self } || $_[0];
-	Object::Hybrid::_ref_type($FH) eq 'GLOB'
-	or fileno $FH 
-	or die("Can't locate object method 'self' via package " . (ref($_[0]) || $_[0]) );
-	return $FH 
-};
-
 Object::Hybrid->methods({
-
+	self      => sub { $_[0] },
 	TIEHANDLE => sub { 
 		my ($elf, $fh, @open_args) = @_;
 
