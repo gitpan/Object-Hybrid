@@ -1,8 +1,3 @@
-Object-Hybrid
-============================
-
-Object::Hybrid promotes Perl primitives (hash, scalar, array, or filehandle) to become hybrid objects
-
 INSTALLATION
 
 With Perl 5.10 and later or if Module::Build module is installed, the preferred way to install is (commands issued in unpacked distribution directory):

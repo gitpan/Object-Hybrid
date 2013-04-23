@@ -5,5 +5,7 @@ MANIFEST
 README
 t/Object-Hybrid.t
 lib/Object/Hybrid.pm
+lib/Object/Hybrid/Class.pm
+lib/Class/Tag.pm
 META.yml
 META.json

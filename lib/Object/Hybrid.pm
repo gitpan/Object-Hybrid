@@ -3,7 +3,7 @@ package Object::Hybrid;
 #use 5.006; 
 
 use strict qw[vars subs];
-$Object::Hybrid::VERSION = '0.03_04';  
+$Object::Hybrid::VERSION = '0.03_5';  
 
 =head1 NAME
 

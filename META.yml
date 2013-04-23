@@ -11,11 +11,16 @@ meta-spec:
   version: 1.4
 name: Object-Hybrid
 provides:
+  Class::Tag:
+    file: lib/Class/Tag.pm
+    version: 0.05
   Object::Hybrid:
     file: lib/Object/Hybrid.pm
-    version: 0.03_04
+    version: 0.03_5
   Object::Hybrid::ARRAY:
     file: lib/Object/Hybrid.pm
+  Object::Hybrid::Class:
+    file: lib/Object/Hybrid/Class.pm
   Object::Hybrid::GLOB:
     file: lib/Object/Hybrid.pm
   Object::Hybrid::HASH:
@@ -25,8 +30,7 @@ provides:
   PACKAGE_REPLACE:
     file: lib/Object/Hybrid.pm
 requires:
-  Class::Tag: 0
   perl: 5.006
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.03_04
+version: 0.03_5
