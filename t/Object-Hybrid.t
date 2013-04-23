@@ -11,22 +11,18 @@ use Test::More;
 my  $use_autobox;
 BEGIN {	
 	$use_autobox = eval{ require autobox };
-	plan tests => 889 + ($use_autobox && 6 ); 
+	plan tests => 909 + ($use_autobox && 6 ); 
 } # allows to calcualte tests plan, if SKIP cannot be used instead
 
 BEGIN { use_ok('Object::Hybrid', qw(promote)) };
 
 {
 	package Object::Hybrid::StdHash2;
-	       @Object::Hybrid::StdHash2::ISA 
-	     = 'Object::Hybrid::HASH';
 	new     Object::Hybrid {}; # this should load Object::Hybrid::HASH
 }
 
 {
 	package Object::Hybrid::StdHash;
-	       @Object::Hybrid::StdHash::ISA 
-	     = Object::Hybrid->CLASS;
 
 	Object::Hybrid->methods(
 		TIEHASH  => sub { bless {}, $_[0] },
@@ -213,19 +209,24 @@ BEGIN { use_ok('Object::Hybrid', qw(promote)) };
 }
 
 my  @hybrid_class 
-= ( 'Object::Hybrid::StdHash',   'Object::Hybrid::StdHash2',   'Object::Hybrid::ExtraHash' );
+= ( 'Object::Hybrid::StdHash'
+,   'Object::Hybrid::StdHash2'
+,   'Object::Hybrid::ExtraHash' );
 
 my  @tieclass 
-= ( 'Tie::StdHash',   'Tie::ExtraHash' );
+= ( 'Tie::StdHash'
+,   'Tie::ExtraHash' );
 
 sub test_hash {
 	my $promote = $_[0];
 
 	foreach my $hybrid_class (@hybrid_class) {
+		my $hybrid_class_frontal  =  Object::Hybrid->frontclass_name($hybrid_class, 'HASH');
+		my $default_class_frontal =  Object::Hybrid->frontclass_name(Object::Hybrid->CLASS_HASH);
 
 		my $primitive = {}; 
-		is(ref $promote->($primitive), Object::Hybrid->CLASS); # makes %$primitive a hybrid
-		is(ref            $primitive,  Object::Hybrid->CLASS);
+		is(ref $promote->($primitive), $default_class_frontal); # makes %$primitive a hybrid
+		is(ref            $primitive,  $default_class_frontal);
 		  %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 		is($primitive->{foo},        'bar');
 		ok($primitive->can('fetch'));
@@ -233,9 +234,18 @@ sub test_hash {
 		ok(Object::Hybrid->is($primitive));
 		is($primitive->FETCH('foo'), 'bar');
 
-		$primitive = undef; 
-		is(ref $promote->($primitive, $hybrid_class),  $hybrid_class); # makes %$primitive a hybrid
-		is(ref            $primitive, $hybrid_class);
+		# testing "fail-safe" compartibility feature...
+		{
+			local $Object::Hybrid::Portable = 1;
+			ok(  !$primitive->non_existing_method);
+			eval{ $primitive->NON_EXISTING_METHOD };
+			ok($@);
+		}
+
+		$primitive = $hybrid_class->can('TIEHASH') ? undef : {}; 
+
+		is(ref $promote->($primitive, $hybrid_class),  $hybrid_class_frontal); # makes %$primitive a hybrid
+		is(ref            $primitive                ,  $hybrid_class_frontal);
 		  %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 		is($primitive->{foo},        'bar');
 		ok($primitive->can('fetch'));
@@ -247,8 +257,8 @@ sub test_hash {
 					 %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 		is(           $primitive->{foo},        'bar');
 		ok( not eval{ $primitive->FETCH('foo') } ); # not yet
-		is(     tied(%$primitive), tied(%{$promote->($primitive, wont_tie => 1)}) ); # both not tied()
-		is(     tied(%$primitive), tied(%{$promote->($primitive, wont_tie => 1)}) ); # $promote->() is idempotent
+		is(     tied(%$primitive), tied(%{$promote->($primitive, mutable_class => 1)}) ); # both not tied()
+		is(     tied(%$primitive), tied(%{$promote->($primitive, mutable_class => 1)}) ); # $promote->() is idempotent
 		ok( Object::Hybrid->is($primitive) );
 					 %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 		ok(           $primitive->can('fetch'));
@@ -266,7 +276,7 @@ sub test_hash {
 			ok( not eval{ $primitive->FETCH('foo') } ); # not yet
 			is(     tied(%$primitive), tied(%{$promote->($primitive)}) );  # NEVER re-ties
 			is(     tied(%$primitive), tied(%{$promote->($primitive)}) ); # $promote->() is idempotent
-			is(       ref($primitive), Object::Hybrid->CLASS);
+			is(       ref($primitive), Object::Hybrid->CLASS_HASH);
 						 %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 			is(           $primitive->FETCH('foo'), 'bar');
 			ok(           $primitive->can('fetch')); # this time check after FETCH() call...
@@ -279,9 +289,9 @@ sub test_hash {
 						 %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 			is(           $primitive->{foo},        'bar');
 			ok( not eval{ $primitive->FETCH('foo') } ); # not yet
-			is(     tied(%$primitive), tied(%{$promote->($primitive, wont_tie => 1)}) );  # NEVER re-ties
-			is(     tied(%$primitive), tied(%{$promote->($primitive, wont_tie => 1)}) ); # $promote->() is idempotent
-			is(       ref($primitive), Object::Hybrid->CLASS);
+			is(     tied(%$primitive), tied(%{$promote->($primitive, mutable_class => 1)}) );  # NEVER re-ties
+			is(     tied(%$primitive), tied(%{$promote->($primitive, mutable_class => 1)}) ); # $promote->() is idempotent
+			is(       ref($primitive), Object::Hybrid->CLASS_HASH);
 						 %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 			is(           $primitive->FETCH('foo'), 'bar');
 			ok(           $primitive->can('fetch')); # this time check after FETCH() call...
@@ -294,7 +304,7 @@ sub test_hash {
 			is(           $primitive->{foo},        'bar');
 			ok( not eval{ $primitive->FETCH('foo') } ); # not yet
 			Object::Hybrid->tie($primitive, $tieclass);
-			is(       ref($primitive), Object::Hybrid->CLASS);
+			is(       ref($primitive), Object::Hybrid->CLASS_HASH);
 						 %$primitive =(foo =>       'bar'); # AFTER tie(), anything before will be ignored
 			is(           $primitive->FETCH('foo'), 'bar');
 			ok(           $primitive->can('fetch')); # this time check after FETCH() call...
@@ -324,13 +334,13 @@ sub test_hash {
 	}
 }
 
-test_hash(sub{             promote(@_) });
-test_hash(sub{ Object::Hybrid->new(@_) });
+test_hash(sub{ goto &promote });
+test_hash(sub{ unshift @_, 'Object::Hybrid'; goto &{ $_[0]->can('new') } });
 
 sub file_size { 
 	my  ($file, $FH) = @_;
 	ref $file eq 'SCALAR' ? length $$file # -s not work on (open() to) scalar handles
-	:   $FH && fileno $FH ?     -s $FH->self 
+	:   $FH && defined fileno $FH ?     -s $FH->self 
 	:                           -s $file;
 }
 
@@ -338,7 +348,7 @@ sub file_slurp {
 	my  ($file, $FH) = @_;
 	if (ref $file eq 'SCALAR') { return $$file }
 	else { 
-		$FH && fileno $FH
+		$FH && defined fileno $FH
 		or open $FH, '<', $file
 		or  diag("Can't open() $file")
 		, return "Can't open() $file";
@@ -461,6 +471,11 @@ sub test_filehandle {
 	ok(     $FH->eof );
 	ok(     $FH->close );
 
+	# testing "fail-safe" compartibility feature: no FETCH() is defined for filehandles...
+	ok(  !$FH->call('fetch') );
+	eval{ $FH->FETCH(); };
+	ok($@);
+
 }
 
 my (
@@ -497,7 +512,7 @@ SKIP: {
 	test_filehandle($file, \*TIED_FH);
 }
 
-$use_autobox and eval <<'CODE';
+$use_autobox and eval <<'CODE', (!$@ || die $@);
 
 $a = { foo => 'bar' };
 {
