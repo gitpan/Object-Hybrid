@@ -13,10 +13,10 @@ name: Object-Hybrid
 provides:
   Class::Tag:
     file: lib/Class/Tag.pm
-    version: 0.05
+    version: 0.06
   Object::Hybrid:
     file: lib/Object/Hybrid.pm
-    version: 0.03_5
+    version: 0.04
   Object::Hybrid::ARRAY:
     file: lib/Object/Hybrid.pm
   Object::Hybrid::Class:
@@ -33,4 +33,4 @@ requires:
   perl: 5.006
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.03_5
+version: 0.04

@@ -3,7 +3,7 @@ package Object::Hybrid;
 #use 5.006; 
 
 use strict qw[vars subs];
-$Object::Hybrid::VERSION = '0.03_5';  
+$Object::Hybrid::VERSION = '0.04';  
 
 =head1 NAME
 
@@ -44,8 +44,6 @@ just be tied()less:
 
 	$primitive->method();
 
-The later call will also not fail due to "can't find method" if method() is not defined by tied(%$primitive), becoming no-op that returns empty list or undef() scalar, making it easier to write code portable accross multiple different tied(%$primitive) classes as well as non-tie()d primitives. In contrast, $primitive->METHOD() aliase call is not similarly "fail-safe" and will raise an exception if neither FETCH() nor fetch() are defined.
-
 In case non-tied() primitives need to be interchangeable with tied() ones that have extended tied() interface, instead of cumbersome (possibly repeating many times) tied()-conditional access expression:
 
 	tied(%$primitive) ? 
@@ -60,7 +58,7 @@ or faster:
 
 	$primitive->fast->FETCH('foo', @args);
 
-However, for non-tie()d primitives the above tied()-conditional switch expression may still be significantly faster, so that it is still preferred for hot paths (tight loops, etc.). For speed and other tradeoffs involved see L</"Performance"> and L</"fast()"> sections.
+However, for non-tie()d primitives the above tied()-conditional switch expression may still be significantly faster, so that it is still preferred for hot paths (tight loops, etc.). For speed and other trade-offs involved see L</"Performance"> and L</"fast()"> sections.
 
 If $FH is a plain filehandle or tiehandle tied to class that implements stat(), ftest() (and others) and self() method, then the following simple code need not to discriminate between plain filehandle and tiehandle:
 
@@ -79,7 +77,7 @@ If $FH is a plain filehandle or tiehandle tied to class that implements stat(), 
 
 =head1 DESCRIPTION
 
-Some applications need to accept both plain primitives as well as tie()d primitives with additional extended interface available through tied() object. For example, application cache may be allowed to optionally use either screamingly fast plain hash or some highly evolved persistent hashes tie()d to disk storage (like DB_File, etc.). There are many similar examples for filehandles, arrays and even scalars. Those are cases when Object::Hybrid combined with simple coding style can make code that handles those primitives compatible across whole spectrum, from plain primitives to all types of extended tied() primitives. There are also other uses, including working around gaps in tiehandle implementation, adding some fancy operations to primitives without using tie() as well as plain syntactic sugar.
+Some applications need to accept both plain primitives as well as tie()d primitives with additional (non-perltie) methods and parameters supported by extended interface available through tied() object. For example, application cache may be allowed to optionally use either screamingly fast plain hash or some highly evolved persistent hashes tie()d to disk storage (like DB_File, etc.). There are many similar examples for filehandles, arrays and even scalars. Those are cases when Object::Hybrid combined with simple coding style can make code that handles those primitives compatible across whole spectrum, from plain primitives to all types of extended tied() primitives. There are also other uses, including working around gaps in tiehandle implementation, adding some fancy operations to primitives without using tie() as well as plain syntactic sugar.
 
 In the context of this module hybrid object is defined as a Perl object that represents its own bless()ed primitive (i.e. the primitive it is implemented with, currently hash, scalar, array, or filehandle). According to this definition, hybrid object can be seen as both primitive and object at the same time. In general case, it is a violation of object encapsulation to access object's underlying bless()ed primitive directly (at least outside of class's methods), but in special case of hybrid objects it is perfectly ok to do so - no violation of encapsulation takes place. 
 
@@ -112,7 +110,7 @@ will work for both in-memory and persistent hashes, and is really fast in case o
 	$hybrid->can('custom_method') 
 	and  $hybrid->custom_method();
 
-For performnce comparison of various interface options see L</"Performance"> section.
+For performance comparison of various interface options see L</"Performance"> section.
 
 Despite promoting primitives to become hybrids turn them into Perl objects, compatibility with arbitrary Perl objects in practice has little value, since code that manipulates objects usually assume objects to be of very specific class. 
 
@@ -127,7 +125,7 @@ one can write:
 	$hybrid->method();       # same
 	$hybrid->fast->method(); # same, but may be faster 
 
-For performnce comparison of various interface options see L</"Performance"> and L</"fast()"> sections.
+For performance comparison of various interface options see L</"Performance"> and L</"fast()"> sections.
 
 =item Incomplete tie() implementation workaround
 
@@ -200,7 +198,7 @@ which makes any method call on primitive in the lexical scope to automatically p
 
 =head1 promote() function
 
-	promote $primitive;                   # bless() to make $primitive a hybrid
+	promote $primitive;                   # bless() $primitive to make it hybrid object
 	promote $primitive => \%args;         # same, but with named arguments
 	promote $primitive =>  %args;         # same
 	promote $primitive => $class;         # same, but with explicit $class to tie() to or bless() into
@@ -220,22 +218,24 @@ The class that primitive is bless()ed into by promote() is generated based on th
 	Object::Hybrid->Class->is(ref($primitive));
 	ref($primitive)->isa($class); # in case $class was specified
 
-If promote() is called on already bless()ed $primitive, i.e. on object, it is equivalent to as if promote() was called on non-bless()ed $primitive with ref($primitive) passed as $class:
+If promote() is called on already bless()ed $primitive, i.e. on object, it is equivalent to as if promote() was called on non-bless()ed $primitive with ref($primitive) passed as $class (see L</"Custom hybrid $class">):
 
 	promote bless $primitive => $class;
 	promote       $primitive => $class; # same
 
-The "mutable_class" option commands whether the hybrid class used for specific primitive is mutable or not. The "mutable_class" => 1 values makes hybrid class mutable, allowing tie() on the primitive to happen after promote(). If hybrid gets tied()d or untie()d, its object interface immediately changes accordingly. Otherwise in case of immutable class, if tie() is called after promote(), perltie methods of tied() class cannot be called on hybrid. If "mutable_class" is undef(), mutable class is used for tied() primitives, immutable otherwise. The explicit "mutable_class" => 0 value makes hybrid class immutable - in theory this allows to use hybrid object interface different from tied() interface, which may be useful in some special cases, but may also violate hybrid equivalence requirement in case of tie()d primitives. Using this option leads to promote() bless()ing primitive into universal Object::Hybrid::CLASS instead of type-specific hybrid class, and this hurts performance very significantly. The semantics of this option is same for custom hybrid class, except in addition "mutable_class" => 1 should be set when custom class defines perltie methods.
+The "mutable_class" option commands whether the hybrid class used for specific primitive is "mutable" or not. The true "mutable_class" => 1 values makes hybrid class mutable in a sense that it allows tie() on the primitive to happen after promote(). If hybrid gets tie()d or untie()d, its object interface immediately changes accordingly. Otherwise in case of immutable class, if tie() is called after promote(), perltie methods of tied() class cannot be called on hybrid (hybrid is broken). If "mutable_class" is undefined, mutable class is used for tied() primitives, immutable otherwise. The explicit "mutable_class" => 0 value makes hybrid class immutable - in theory this allows to use hybrid object interface different from tied() interface, which may be useful in some special cases, but may also violate hybrid equivalence requirement in case of tie()d primitives. The semantics of this option is same for custom hybrid class, but custom hybrid class is required to be tagged with "mutable_class" tag if custom class defines perltie methods (refer to L<Object::Hybrid::Class> for details).
 
-Note that mutable class significantly reduce performance in case of non-tied primitives.
+Note that use of mutable hybrid class significantly reduce performance in case of non-tied primitives.
 
 =head2 Custom hybrid $class
 
-If custom hybrid $class is specified and either $primitive is not tied() or not_tied => 1 option is given, then $primitive is bless()ed to hybrid class that inherits from $class. 
+If custom hybrid $class is specified, then $primitive is bless()ed into hybrid class that inherits from $class. 
 
-If however, C<< Object::Hybrid::Class->is($class) >> is true (means $class is the complete hybrid class implementation, then .$primitive is simply bless()ed into $class.
+If and only if $class overrides methods of the hybrid object, then L<properties of hybrid objects|/"Properties of hybrid objects"> become requirements for $class to comply with. Otherwise there are no requirements for the class, except it should make sense to use it as hybrid class, i.e. according to L<hybrid object definition|/DESCRIPTION> class should represent its bless()ed primitive (e.g. IO::Handle and subclasses may well be used as custom hybrid classes). In particular, calling promote() with the $class name of the empty class is equivalent to calling promote() without specifying custom $class, i.e. it will work. For lengthy discussion of hybrid class requirements refer to L<Object::Hybrid::Class>.
 
-Custom $class must be type-specific for given $primitive, so the type-conditional expression for $class may need to be used by caller.
+If however, C<< Object::Hybrid->Class->is($class) >> is true, which means $class is the complete hybrid class implementation, then $primitive is simply bless()ed into that $class.
+
+If custom $class is type-specific for given $primitive, the type-conditional expression for $class may need to be used by caller.
 
 If custom hybrid $class is specified without $primitive or with not defined($primitive), then $primitive of the type expected by $class is autovivified. If $class do not allow to determine what $primitive type it expects, then exception is raised.
 
@@ -293,7 +293,7 @@ This feature is especially relevant in case when there are samename built-in fun
 
 In case of tie()d hybrid it is more efficient to call method that is defined by underlying tied() class, for example, FETCH() is likely to be faster than fetch() for tie()d primitives (as their tied() classes usually define no fetch(), just FETCH()). In all other cases aliases are equally efficient.
 
-Setting global C<$Object::Hybrid::Portable = 1> (usually local()ized to some block) changes behavior of aliases making them non-equivalent. Calls of lower-case aliases now do not fail (are "fail-safe") due to method being not defined by either hybrid class or underlying tied() class (if any), becoming no-op and returning empty list or undef scalar. This allows to write portable code that calls non-standard methods on tied() hybrids without (ab)using can() calls or eval{} wraps, which otherwise would make code cumbersome (e.g. in case of eval{} it is necessary to manually distinguish "can't find method" from errors in defined method, etc.). But it is of course risky too, as typos will not blow up, leading to silent error propagation, so that $Object::Hybrid::Portable = 1 should be used with care, after first testing code without it.
+Setting global C<$Object::Hybrid::Portable = 1> (usually local()ized to some block) changes behavior of aliases making them non-equivalent. Calls of lower-case aliases now do not fail (are "fail-safe") due to method being not defined by either hybrid class or underlying tied() class (if any), becoming no-op and returning empty list or undef scalar. This allows to write portable code that calls non-standard methods on tied() hybrids without (ab)using can() calls or eval{} wraps, which otherwise would make code cumbersome (e.g. in case of eval{} it is necessary to manually distinguish "can't find method" from errors in defined method, etc.). But it is of course risky too, as typos will not blow up, leading to silent error propagation, so that $Object::Hybrid::Portable = 1 is an optional feature that should be used with care, after first testing code without it.
 
 In contrast, upper-case aliases are not similarly fail-safe under C<$Object::Hybrid::Portable = 1>, calling them is a fatal error if method, both lower-case and upper-case, is not defined, so that they can be used to ensure method is really called (mnemonics: insist on it being called by writing it in upper case). If, however, lower-case method is defined, the upper-case call will call it, not fail. For example:
 
@@ -325,7 +325,7 @@ Except in case of call() caller() within &$method is one level deeper in the sta
 
 =head2 fast()
 
-The fast() efficiently returns tied() object for tie()d invocant and invocant itself for non-tied. The fast() method is used for "manual" delegation to tied() object as a way of performance optimization:
+The fast() efficiently returns tied() object for tie()d invocant, and invocant itself for non-tied. The fast() method is used for "manual" delegation to tied() object as a way of performance optimization:
 
 	$hybrid->fast->FETCH('a'); # for tied() $hybrid is much faster than...
 	$hybrid->FETCH('a');
@@ -339,7 +339,7 @@ For non-tied hybrids, however, situation is reversed, but in absolute terms usin
 
 The self() method returns underlying primitive: either bless()ed primitive of the hybrid object (i.e. hybrid object itself) or, if possible, real underlying primitive that is used by tied() object/class. 
 
-Many tied() objects (like Tie::ExtraHash) transparently delegate operations on tie()d primitive to real primitive encapsulated somewhere inside that tied() object, using object just to store some additional state. If this is the case, tied() class may define self() as accessor for that underlying primitive to expose it to methods of the hybrid class and to users. The self() method allows to access that real primitive directly, falling back to hybrid's bless() primitive, if it is not possible or tied() class do not provide self() method. As a result, methods of custom hybrid class can have access to both tie()d bless()ed primitive (slow) and underlying real primitive (fast). 
+Many tied() objects (like Tie::ExtraHash) transparently delegate operations on tie()d primitive to real primitive encapsulated somewhere inside that tied() object, using object just to store some additional state. If this is the case, tied() class may define self() as accessor for that underlying primitive to directly expose it to methods of the hybrid class and to users. The self() method allows to access that real primitive directly, falling back to hybrid's bless() primitive, if it is not possible or tied() class do not provide self() method. As a result, methods of custom hybrid class can have access to both tie()d bless()ed primitive (slow) and underlying real primitive (fast). 
 
 The tied() class must not define self() if this may result in violation of encapsulation, i.e. if delegation to underlying real primitive is not transparent enough. Example of transparent tieclass that may define self() is Tie::ExtraHash. On the other hand some tieclasses, like Tie::StdHash, are so transparent that need not to define self() at all as default one is good for them.
 
@@ -421,6 +421,8 @@ Object::Hybrid relies on Class::Tag to store and query inheritable meta-data of 
 
 =head1 is() method
 
+The is () is  an equivalent of Object::Hybrid->Class->is():
+
 	promote                       $hybrid;
 	Object::Hybrid->is(           $hybrid); # true
 	Object::Hybrid->Class->is(    $hybrid); # same
@@ -459,7 +461,7 @@ This method is useful to try some unknown $thing at hands that it is too uncerta
 	Object::Hybrid->ref_tied(sub{})      eq '';    # true, since sub{} is not tie()able
 	Object::Hybrid->ref_tied('string')   eq '';    # true, since 'string' is not tie()able
 
-and so on...
+and so on.
 
 =head1 Subclassing Object::Hybrid
 

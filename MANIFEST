@@ -7,5 +7,6 @@ t/Object-Hybrid.t
 lib/Object/Hybrid.pm
 lib/Object/Hybrid/Class.pm
 lib/Class/Tag.pm
+bench/benchmark_hash.pl
 META.yml
 META.json

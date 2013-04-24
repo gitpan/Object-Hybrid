@@ -1,7 +1,7 @@
 use Module::Build;
 my $build = Module::Build->new(
 	module_name => 'Object::Hybrid',
-	dist_version => '0.03_5',
+	dist_version => '0.04',
 	license  => 'perl',
 	requires => {
 		'perl'           => '5.006',
