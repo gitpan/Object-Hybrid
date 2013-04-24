@@ -3,7 +3,14 @@ package Object::Hybrid;
 #use 5.006; 
 
 use strict qw[vars subs];
-$Object::Hybrid::VERSION = '0.05';  
+$Object::Hybrid::VERSION = '0.06';  
+
+# working around CPAN indexer bug 
+$Object::Hybrid::Class::VERSION  = '0';
+$Object::Hybrid::HASH::VERSION   = '0';
+$Object::Hybrid::ARRAY::VERSION  = '0';
+$Object::Hybrid::GLOB::VERSION   = '0';
+$Object::Hybrid::SCALAR::VERSION = '0';
 
 =head1 NAME
 

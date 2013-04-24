@@ -3,5 +3,5 @@ Revision history for Object::Hybrid module:
 0.03  29 March 2013
 	- original prototype (Big Bang) version released to CPAN
 
-0.04  24 April 2013
+0.06  24 April 2013
 	- Substantial changes in interface, internals and documentation. Performance optimization. Performance issues documented. 
