@@ -1,28 +1,24 @@
 package  Object::Hybrid::Class; 
 use Class::Tag qw(tagger_class);
-use      Object::Hybrid::Class qw(is mutable_class);
+use      Object::Hybrid::Class qw(is);
 
 1;
 
 =head1 DESCRIPTION
 
-This document describes requirements for custom hybrid classes. It may be useful only for developers, not users of Hybrid::Object, as currently Hybrid::Object by default automatically constructs hybrid class from any given class and use it to promote() primitives, so that there is no need to be concerned with the following requirements. However, this document is still useful to understand Object::Hybrid architecture.
+By default, Object::Hybrid->new() and promote() bless primitive into one of default hybrid classes based on primitive type and arguments specified. Default hybrid classes can be extended/overriden in two ways: 1) specifying custom class as argument to new()/promote() to subclass default hybrid class with; and/or 2) subclassing Object::Hybrid class to redefine default hybrid classes, possibly by subclassing them as well. Subclassing default hybrid class in either of those cases allows to easily extend hybrid class, since all requirements for hybrid class are already met by superclass, but since subclassing extends and/or overrides superclass, it may be necessary to ensure that hybrid class requirements are met by subclass as well. 
 
-NOTE: this document may be outdated in some places, but still outlines architecture correctly.
+Hybrid class is required to implement L<Properties of hybrid objects|Object::Hybrid/"Properties of hybrid objects">. Here those requirements are not repeated, but instead discussed in more detail.
+
+There are many benefits of using custom hybrid classes, in particular - opportunity of L<operator overloading|Object::Hybrid/"Operator overloading">.
 
 =head1 Hybrid classes
 
-Primitives can be promote()d by blessing it into custom hybrid class specified as argument. There are few advantages of using custom hybrid classes, in particular - opportunity for operator overloading. 
-
-Custom hybrid class is required to subclass Object::Hybrid::CLASS (the default hybrid class) and is to meet certain other requirements, but all those requirements are met automatically by subclassing Object::Hybrid::CLASS, which makes construction of custom hybrid classes easier. For example, custom subclass of Object::Hybrid::CLASS may just define overloading of some operators, etc.  
-
 =begin comment
 
-Custom hybrid class may in theory target only specific type of primitives, as well as either tied() or not tied(), but then it is the responsibility of caller to use it conditionally only for promote()ing primitives of corresponding type. In contrast, default Object::Hybrid::CLASS is universal hybrid class that works fine for all supported types of primitives.
+Custom hybrid class may in theory target only specific type of primitives, as well as either tied() or not tied(), but then it is the responsibility of caller to use it conditionally only for promote()ing primitives of corresponding type.
 
 =end comment
-
-Although subclassing Object::Hybrid::CLASS allows to avoid building it from scratch, still hybrid class requirements need to be understood for extending Object::Hybrid::CLASS in subclasses.
 
 Promoting primitive to become hybrid (i.e. bless()ing it into hybrid class) simply adds object interface to primitive and is nothing more than a way to extend Perl primitives. There are many ways hybrid class can be designed. However, designing hybrid class in a special way allows to achieve compatibility and synergy with another major way of extending primitives - perltie API, as well as some other goals. 
 
@@ -36,20 +32,15 @@ As a result, promote()ing primitives with such hybrid class allows to write simp
 
 =end comment
 
-Thus, for class to qualify as hybrid class it must meet the following requirements (all of them met by just subclassing Object::Hybrid::CLASS):
+Hybrid class is required to implement L<Properties of hybrid objects|Object::Hybrid/"Properties of hybrid objects">. Below some of those requirements are discusse in more detail:
 
-=over
+=head2 Equivalent perltie API
 
-=item Equivalent perltie API
-
-For class to qualify as hybrid class it must implement perltie interface (all methods) for some type of primitive B<and> that interface (perltie methods) must be equivalent to directly accessing underlying primitive - B<both> tie()d and not tie()d. The equivalence requirement is what makes, say, next two lines to have exactly same effect for hash hybrids:
-
-	$hybrid->{foo};
-	$hybrid->FETCH('foo'); # same 
+Refer to L<Equivalent perltie API|Object::Hybrid/"Equivalent perltie API">.
 
 There are several ways to comply with this requirement. If primitive is not tied(), then methods may operate on the primitive to produce same effect as corresponding direct access. There are two ways to modify the effect of direct access itself: tie() and dereference operators overloading. If primitive is tied(), then methods may delegate to tied() object to automatically achieve equivalence, or operate on tie()d primitive to produce same result as direct access would. If dereference operator is overloaded, corresponding access methods should take that into account and produce same result as overloaded direct access would.
 
-For example (this is approximately the way Object::Hybrid::CLASS does it):
+For example:
 
 	sub FETCH {
 		my $self = shift;
@@ -64,141 +55,55 @@ The equivalence requirement limits hybrid classes to include only a subset of ti
 
 In this context alternative to promote()ing primitive is tie()ing it to something like Tie::StdHash as it also will unify its interface with other tie()d hashes. However, this alternative gives up high speed of plain primitives (slowdown of about 30-40 times in some benchmarks), also tie()ing hash full of data may involve sizable costs of data copying, as well as this alternative cannot deliver same range of benefits hybrid objects can.
 
-For performnce comparison of various interface options see L</"Performance"> section.
+=head2 Delegation to tied() object
 
-=item Complete perltie API
+Refer to L<Delegation to tied() object|Object::Hybrid/"Delegation to tied() object">.
 
-Currently tie()ing filehandles is still incomplete in Perl: sysopen(), truncate(), flock(), fcntl(), stat() and -X can't currently be trapped. However, hybrid class should implement equivalent samename methods and their uppercase aliases (SYSOPEN(), TRUNCATE(), FLOCK(), FCNTL(), STAT() and FTEST()) to fill the gap and also allow compatibility with tiehandle classes that also implement them. This will allow to write portable code that works around gaps in tiehandle implementation by B<always> using methods on hybrids filehandles instead of Perl built-in functions, for example:
+Although methods of the hybrid class may trigger methods of tied() class by simply accessing bless()ed primitive directly, they cannot pass arguments to them - this is why delegation is required. And it is significantly faster too. 
 
-	promote $FH;
-	
-	$FH->stat(); 
-	$FH->ftest('-X'); 
-	
-	# same with indirect method calls...
-	STAT  $FH;
-	FTEST $FH  '-X';
-
-Thus, to avoid problems with gaps in tiehandle implementation simply always call methods on hybrids instead of Perl built-in functions.
-
-=item Delegation to tied() object
-
-In case of tied() primitives, hybrid class should delegate all methods to tied() object. Delegation invokes called method on tied() object instead of hybrid. This is required to allow invoking perltie methods B<with parameters> on hybrid directly (instead of on tied() object):
-
-	$hybrid->STORE($value, @args);
-
-Although methods of the hybrid class may trigger methods of tied() class by simply accessing bless()ed primitive directly, they cannot pass arguments to them - this is why delegation is required.
-
-This requirement makes entire interface of tied() object exposed as hybrid object interface. Caller may use $hybrid->can('foo') to determine whether tied() object (if any) or hybrid implement certain methods.
-
-If tied() object provides no called method, delegation fails and then hybrid class is to fall back to calling its own samename method (of the hybrid class), called "fallback method", on hybrid itself. Fallback method should correspond to type of primitive, in case there are options (for example, FETCH() called for hash and array are supposed to be different methods). Fallback methods are simply same methods that would be called if hybrid is not tied(), meaning same methods of the non-tied() hybrid remain available if hybrid is tied(), except when tied() object exposes and replaces them with its own methods, if any, with same names. 
-
-In particular, this is useful for defining methods that tied() class do not implement, e.g. to work around gaps in perltie implementation. For example, since stat() is not a perltie method currently, it is unlikely to be implemented by tiehandle class, but it is required to be defined for hybrid object to have portable C<< promote($tied_fh)->stat >> workarounds for currently broken C<stat($tied_fh)>, so hybrid's stat() method may look like:
+Examples of usefull fallback methods are stat() and few other methods implemented by default hybrid class for GLOB primitives like this: 
 
 	sub stat { stat $_[0]->self }
 
-The stat() and few other methods provided by default hybrid class are similar to that, they use self() methods and because of that can work either for simple tied() classes like Tie::StdHash without any support form tied() class, or for tied() classes that just implement single additional self() method. If it is not possible for tied() class to define self() method, then tied() class may need to implement stat() and other methods itself.
+Using self() method in fallback method provides compartibility with simple tied() classes like Tie::StdHash without any support form tied() class itself, as well as with tied() classes that just implement single additional self() method. If it is not possible for tied() class to define self() method, then tied() class may need to implement stat() and other methods itself.
 
-Note that for perltie methods fallback methods are almost never called, because normally tieclass does implement perltie methods. However, if it is not, the equivalence requirement is violated, since triggering perltie method implicitly, via primitive access, will lead to exception raised as call is on tied() object and corresponding perltie method is not provided, but calling that method on hybrid may end up calling fallback method, i.e. no exception is raised. Though, raising exception in both cases is not to be considered equivalence either.
+Note that for perltie methods fallback methods are almost never called, because normally tieclass does implement perltie methods. If it is not, the equivalence requirement would be violated, since triggering perltie method implicitly, via primitive access, will lead to exception raised as call is on tied() object and corresponding perltie method is not provided, but calling that method on hybrid may end up calling fallback method, i.e. no exception is raised. Though, raising exception in both cases is not to be considered equivalence either.
 
-=item Method aliases
+=head2 Method aliases
 
-Hybrid classes must provide altered-case aliases for all its methods (e.g. lowercased aliases for all perltie methods). The method alias name is returned by C<< Object::Hybrid->method_alias($method_name) >>.
+Refer to L<Method aliases|Object::Hybrid/"Method aliases">.
 
-This requirement is especially relevant in case when there are same-name built-in functions for accessing primitives: shift(), exists(), seek(), etc. In this case and as general coding style for hybrids: the lower case should be used as functions or in direct method calls notation, while upper case can be used for indirect method call notation (later minimizes chances of indirect method notation colliding with non-parenthesized same name function calls). For example:
+The promote()ing of tied() primitive automatically provides altered-case aliases to methods of tied() object - no need to modify tied() classes.
 
-	seek $FH, 0, 0;         #        function call (coma after $FH, no extra arguments)
-	SEEK $FH  0, 0, @args;  # indirect method call (no coma after $FH, @args extended interface)
-	$FH->seek(0, 0, @args); #   direct method call (@args extended interface)
+This feature relies on AUTOLOAD() of default hybrid clas, so if custom hybrid class needs to implement its own AUTOLOAD(), it must behave accordingly or call overriden AUTOLOAD() from default hybrid class, but later cannot be done with ->SUPER::AUTOLOAD() notation, as custom hybrid class do not directly inherit from default hybrid class, so be ware.
 
-Altered-case aliases are automatically provided by promote() to tied() interfaces of tie()d primitives - no need to modify tied() classes.
+Automatic altered-case aliases provided by default hybrid class are relatively costly, as they involve extra can() call to locate altered-case method in case originally called method is not defined. However, this is only relevant in case of mutable => 1 promote() for tie()d primitives, since in other cases hybrid class (either default or custom) is likely to have both aliases defined and extra cost is not incurred. In this rare case to avoid cost of automatic aliasing in case of tie()d primitives (tied to unaware tieclasses), it is better to call method's aliase that is known (or likely) to be defined by underlying tied() class. In this specific case, for example, FETCH() is likely to be faster than fetch() for tie()d primitives (as their tied() classes usually define no fetch(), just FETCH()).
 
-In addition, calls of lower-case aliases must not fail (be fail-safe) due to method being not defined by either hybrid class or underlying tied() class (if any), becoming no-op and returning empty list or undef scalar. This allows to write portable code without (ab)using can() calls or eval{} wraps, which make code very combersome (in case of eval{} it is necessary to manually distinguish "can't find method" from errors in defined method). In contrast, upper-case aliases are not similarly fail-safe, calling them must be a fatal error if method, either lower-case or upper-case, is not defined, so that they can be used to ensure method is really called (mnemonics: insist on it being called by writing it in upper case). If, however, lower-case method is defined, the upper-case call will call it, not fail. For example:
+=head2 self() method
 
-	$hybrid->non_existing_method();   # must not fail due to "can't find method"
-	$hybrid->NON_EXISTING_METHOD();   # fatal "can't find method" error
-	
-	$hybrid->maybe_existing_method(); # must not fail due to "can't find method"
-	$hybrid->MAYBE_EXISTING_METHOD(); # may be a fatal "can't find method" error
-	
-	$filehandle_hybrid->fetch();      # must not fail due to "can't find method"
-	$filehandle_hybrid->FETCH();      # likely fatal "can't find method" error (since filehandles normaly have no FETCH()), but will call fetch() (not fail) if fetch() happens to be defined
+Refer to L<self() method|Object::Hybrid/"self() method">.
 
-Implementing this feature of hybrid class requires autoloading non-defined methods and making AUTOLOAD to behave accordingly, but custom hybrid class can inherit it from default hybrid class.
+Use of self() method is limited since it requires tieclass (with exception for simple tieclasses similar to Tie::StdHash, Tie::StdHandle, etc.) to also implement self() method, and also there may be tied primitives that simply do not have (single) underlying primitive to operate on it non-transparently, but still it is useful for writing code portable across specific tieclasses that are known to support self(), so it is a requirement for hybrid classes (to be compatible).
 
-Automatic altered-case aliases provided by default hybrid class are relatively costly, as they involve extra can() call to locate altered-case method in case originally called method is not defined. However, this is only relevant for tie()d primitives as hybrid class (either default or custom) is likely to have both aliases defined and automatic aliasing is not used. To avoid cost of automatic aliasing in case of tie()d primitives, it is better to call method's aliase that is known (or likely) to be defined by underlying tied() class. This means that, for example, FETCH() is likely to be faster than fetch() for tie()d primitives (as their tied() classes usually define no fetch(), just FETCH()).
-
-=item fast() (aliase call())
-
-The fast() method must efficiently return tied() object for tie()d invocant and invocant itself for non-tied. The fast() method is used for performance optimization:
-
-	$hybrid->fast->FETCH('a'); # for tied() $hybrid is much faster than...
-	$hybrid->FETCH('a');
-	
-	$hybrid->fast->can('foo'); # for tied() $hybrid is much faster than...
-	$hybrid->can('foo');
-
-For non-tied hybrids situation is reversed, but in absolute terms using fast() pays off, especially where tied hybrids are more common throughput. The tradeoff however is that $hybrid->fast->FETCH() provides no automatic aliasing, no fail-safety for non-defined methods, and do not fall back to methods of hybrid class in case tied() class defines no called method, so that using it is more risky and requires better knowledge of classes involved.
-
-=item self() method
-
-Any method of the hybrid object has only that object to operate on using either other hybrid methods or manipulating bless()ed primitive, either tie()d or not, directly. However, many tied() objects (like Tie::ExtraHash) transparently delegate operations on tie()d primitive to real primitive encapsulated somewhere inside that tied() object, using object just to store some additional state. If this is the case, tied() class may define self() as accessor for that underlying primitive to expose it to methods of the hybrid class and to users. As a result, methods of hybrid class would have access to both tie()d primitive and underlying real primitive. This can have a number of useful applications, in particular to work around gaps in tiehandle implementation and to increase performance, as it allows hybrid methods to bypass perltie layer and operate on underlying primitive directly, which may be bring large efficiency benefits for some bulk operations on underlying primitive. And in case of not tied() primitive self() simply returns that primitive.
-
-For example, since there is no yet perltie support for stat() and -X tests, called on tiehandle they do not propagate to underlying real filehandle, so they should be somehow propagated manually, but it requires knowing how to get underlying filehandle, if there is any, out of tied() object. Defining self() method in tieclass is supposed to do just that, and hybrid classes are expected to define self() method as well, so that portable code can simply be:
-
-	promote $FH;
-	
-	stat $FH->self;
-	-X   $FH->self;
-
-=for comment
-	# NOTE: the indirect notation will not work in this case, so beware...
-	#-X SELF $FH; # DON'T!
-	#-X SELF $FH; # DON'T!
-
-	# or nearly same using methods (default implementations of these methods also use self() under the hood):
-	STAT  $FH;
-	FTEST $FH '-X';
-	$FH->stat(); 
-	$FH->ftest('-X'); 
-
-Note that use of self() method (as in above code) is limited since it requires tiehandle class (with exception for simple tiehandle classes similar to Tie::StdHandle) to also implement self() method, and also there may be tiehandles that simply do not have (single) underlying filehandle or operate it non-transparently, but still it is useful for writing code portable across specific tiehandle classes that are known to support self(), so it is a requirement for hybrid classes (to be compatible).
+The self() method is intended primarily for performance optimizations and to work around gaps in perltie (specifically, tiehandles) implementation. If there were no gaps, then there is no need for self() method except for performance optimization, as hybrid primitive is then B<equivalent> to (but much slower than) what self() is supposed to return. However, gaps lead to situations when hybrid primitive is not equivalent and you need to get underlying primitive that tied() object uses under the hood - self() method is expected to return just that. To work around gaps in a way compatible with hybrid objects, it is recommended that tieclasses either implement self(), if possible, or implement corresponding workaround methods themselves (see L</"Complete perltie API">).
 
 Simple tieclasses can define only self() method and automatically get sysopen(), truncate(), flock(), fcntl(), stat() and ftest() methods of default hybrid class to work for them correctly.
-
-The self() method is intended primarily for performance optimizations and to work around gaps in perltie (specifically, tiehandles) implementation. If there were no gaps, then there is no need for self() method except for performance optimization, as hybrid primitive is then B<equivalent> to (but much slower than) what self() is supposed to return. However, gaps lead to situations when hybrid primitive is not equivalent and you need to get underlying primitive that tied() object uses under the hood - self() method is expected to return just that. To work around gaps in a way compatible with hybrid objects, it is recommended that tieclasses either implement self(), if possible, or implement corresponding workaround methods themself (see L</"Complete perltie API">).
 
 Accordingly, as a requirement, hybrid class must provide self() method that simply returns the hybrid object: 
 
 	sub self { $_[0] }
 
-Since due to perltie implementation gaps hybrid object may be "non-equivalent" (as mentioned above) and, thus, of little use in case primitive is tie()d, self() may also return tied() object (in hope that tied() class is a simple Tie::StdHash-like class) in case self() of hybrid class is called as B<fallback method> (see L</"Delegation to tied() object">) for tied() hybrid, with return value at least checked to be of the same type as invocant and also that name of the tied() class has 'Std' in it:
+Finally, for many tieclasses it may not be possible to implement correct self() method, those tieclasses should implement self{} that simply raises an exception with proper explanations.
 
-	sub self { 
-		my      $self; 
-		return  $self
-		if      $self 
-		=   Object::Hybrid->ref_tied($_[0]) 
-		and Object::Hybrid->ref_type($_[0]) 
-		eq  Object::Hybrid->ref_type($self) 
-		and ref($self) =~ /Std/;
-		
-		!$self or die("tied() class defines nor valid self() method for $_[0] (self() returned $self)");
-		
-		return $_[0]
-	}
+=head2 Optional bless() method
 
-This is about how self() is implemented in default hybrid class. Although it works fine for simple tied() classes similar to Tie::StdHash (Tie::StdHandle, etc.) that have 'Std' in name (checked as an extra precaution), still for other, more complex such tied() classes this default self() may silently fail to deliver correct return value (there will be no exception raised by self() itself, but caller will hopefully soon notice things gone unexpected way), so tied() class may need to implement correct self() method itself. Finally, for many tieclasses it may not be possible to implement correct self() method, those tieclasses should implement self{} that simply raises an exception with proper explanations.
+Refer to L<Optional bless() method|Object::Hybrid/"Optional bless() method">.
 
-The default hybrid class makes no use of self() except for working around tiehandle implementation gaps, so by default hybrids do not depend on tieclass implementing self() method.
+TIE*() and new() constructors are not used as constructor/initializer for hybrid object, since in case of tied() hybrid (or in exotic case tieclass, like Tie::StdHash, is subclassed to make hybrid class) those are supposed to be perltie-style constructors and are kept as such.
 
-=item Optional bless() method
+=head2 C<use Object::Hybrid::Class>
 
-If defined, C<< $hybrid_class->bless($primitive) >> method is called instead of otherwise calling bless($primitive, $hybrid_class). The bless() method is optional. It can be used as constructor/initializer for hybrid object, except it is to reuse $primitive (same as built-in bless()) instead of creating new. TIE*() and new() constructors are not used for that, as they are supposed to be perltie-style constructors and we keep them as such in case tieclass is subclassed to make hybrid class.
-
-=item C<use Object::Hybrid::Class>
-
-To mark complete valid hybrid class as such, put this lines into it:
+To mark complete valid hybrid class as such, put this lines into it, unless it already inherits from such a class:
 
 	package CustomHybridClass;	
 	use Object::Hybrid;
@@ -210,21 +115,7 @@ This requirement allows to use the following test to find out if $class is a hyb
 
 This test returns true for CustomHybridClass and all its subclasses, since subclasses of valid hybrid class are unlikely to (intentionally) make it invalid, but is not necessarily true in super-classes, as those may be not be (marked as) valid hybrid classes.
 
-Also:
-
-	package CustomHybridClass;	
-	use Object::Hybrid;
-	use Object::Hybrid::Class 'is mutable_class';
-
-is equivalent to mutable_class => 1 argument for promote(), i.e. allows CustomHybridClass to be always used as mutable hybrid class that allows hybrids being later tie()d or untie()d, changing interface accordingly (thoug mutable hybrid classes/objects are way slower).
-
-=back
-
-Provided that these requirements are met, hybrid class may be arbitrarily extended by adding custom parameters to perltie methods as well as adding custom, non-perltie methods.
-
-It is recommended that hybrid class subclasses Object::Hybrid::CLASS, as it at least ensures proper self() is defined. Or better subclass corresponding Object::Hybrid::FOO class (where FOO is either HASH, SCALAR, ARRAY or GLOB), so that only some methods may be overwritten. To automatically provide required altered-case aliasing of methods, use Object::Hybrid->methods() to define methods in subclass (see source of this module for examples).
-
-=head2 Overriding with methods()
+=head1 Overriding with methods()
 
 The methods() method should always be used to define methods in custom hybrid classes, as it automatically defines altered-case aliases for methods and can also define other aliases as well. For example, the following defines self(), self(), only(), ONLY(), directly(), DIRECTLY() as aliases for same method:
 
@@ -236,7 +127,18 @@ The methods() method should always be used to define methods in custom hybrid cl
 
 =for comment Since indirect method notation unfortunately do not work for self(), the self() method name should read naturally in direct notation, and preferably be not readable in indirect notation to discourage its accidental use. This criteria reject just(), very() and leaves only(), directly(), itself() alternatives. The only() reads ok, but it reads ok in indirect notation too. The itself() reads nice with $FH, but not with, say, $LINES filehandle, etc. So, directly() seems to be viable alternative: stat $FH->directly.
 
+=head1 Subclassing Object::Hybrid
 
+Subclassing Object::Hybrid and overriding new() in the subclass will automatically override promote() exported by that subclass, so there is no need to explicitly redefine promote() in subclass.
+
+The CLASS_DEFAULT() is to define name of default class to be used as custom hybrid class in case none are provided as argument to new() or promote(). Object::Hybrid->CLASS_DEFAULT value is not defined, but subclasses may well define it (it is one of the he  main reasons to support subclassing of Object::Hybrid). Subclass must load class referred to by CLASS_DEFAULT().
+
+Values of certain Object::Hybrid attributes FOO() define names of type-specific hybrid classes, and corresponding LOAD_FOO() methods are expected to load those type-specific hybrid classes. Consequently, subclasses may redefine those attributes and methods to have different type-specific hybrid classes. For example, subclass may override them as follows:
+
+	sub      HASH_UNTIED () {     'Tie::StdHash' }
+	sub LOAD_HASH_UNTIED    { require Tie::Hash  } # Tie::Hash loads Tie::StdHash class
+
+But note that Tie::StdHash class here is used only as example - it is not a complete hybrid class impplementation since it do not implement all properties hybrid class is required to have - see L</"Properties of hybrid objects">.
 
 =head1 AUTHOR
 

@@ -6,7 +6,7 @@ package Class::Tag;
 #use 5.006; 
 
 use strict qw[vars subs];
-$Class::Tag::VERSION = '0.06';  
+$Class::Tag::VERSION = '0.09';  
 
 =head1 NAME
 
@@ -27,7 +27,8 @@ Directly using Class::Tag as tagger:
 	tag Class::Tag 'tagged'; # same, but at run-time
 
 	# query 'tagged' tag on the Foo and Bar...
-	require Foo; # required before next check
+	require Foo; # if necessary 
+	require Bar; # if necessary 
 	Class::Tag->tagged('Foo'); # true
 	Class::Tag->tagged('Bar'); # false
 
@@ -100,7 +101,7 @@ Using default 'is' tag:
 Using tags 'class' and 'pureperl': 
 
 	package Foo; 
-	# tagger class Foo with tags 'class' and 'pureperl' of Awesome tagger class...
+	# tag class Foo with tags 'class' and 'pureperl' of Awesome tagger class...
 	use Awesome  'class';
 	use Awesome              'pureperl';
 	use Awesome  'class',    'pureperl';       # same
@@ -317,6 +318,10 @@ except Class::Tag's default accessor implements copy-on-write tag values on bles
 
 Class::Tag solves these problems by moving tag constructors and accessors to tagger class, which is far more predictable and controlled environment.
 
+=head1 SEE ALSO
+
+The Class::DOES module provide the ability to use DOES() for tagging classes with role names - see discusssion in L</"Traditional alternatives">.
+
 =head1 SUPPORT
 
 Send bug reports, patches, ideas, suggestions, feature requests or any module-related information to L<mailto:parsels@mail.ru>. They are welcome and each carefully considered.
@@ -347,6 +352,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 no warnings;  
 
 use Carp;
+use Scalar::Util qw(blessed);
 
 sub NAMESPACE () { 'aixfHgvpm7hgVziaO' }
 
@@ -444,9 +450,11 @@ sub new_import {
 							_tagged_accessor($tagger_class, $AUTOLOAD);
 						}
 
-						my $scalar_value =     defined $_[0] # called as method
+						my $scalar_value =   defined $_[0] # called as method
 						? &{  shift;                 $_[0]->can($tagged_accessor)       or return undef }
-						: &{*{join '::', ref($_[1])||$_[1],     $tagged_accessor}{CODE} or return undef }; 
+						: &{*{join '::', ref($_[1])||$_[1],     $tagged_accessor}{CODE} or return undef } 
+						if   $_[1] and (!ref $_[1] or blessed($_[1])) 
+						or   croak("Querying tag of untagable $_[1]");
 						return ref $scalar_value eq $tagger_class ? $$scalar_value : undef
 
 					}
@@ -457,7 +465,7 @@ sub new_import {
 					$tagger_class->can($tag) ) or
 					$tagger_class->isa( ref
 					$tagger_class->can('AUTOLOAD') ) 
-					or confess("Error: tagger class $tagger_class declares no '$tag' tag: ", $tagged_class);
+					or croak("Error: tagger class $tagger_class declares no '$tag' tag: ", $tagged_class);
 				}
 			}
 
